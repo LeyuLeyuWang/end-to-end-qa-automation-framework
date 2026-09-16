@@ -1,209 +1,176 @@
-# QA Automation Framework — V5
+# End-to-End QA Automation Framework
 
-V5 新增 Chrome/Firefox、无头模式、Web 类并行、Allure 和 GitHub Actions 配置。云端运行尚待上传仓库后验收；本地结果见 [V5 交接](docs/V5_HANDOFF.md)。
+**English** | [简体中文](README.zh-CN.md)
 
-Java QA 自动化学习项目。**24 个 Web + 14 个 API + 8 个数据库场景，共 46 个执行、35 个业务 @Test 方法。** V3 Appium 按用户决定暂缓，当前路线为 V0 → V1 → V2 → V4 → V5。
+A Java QA automation portfolio covering browser workflows, REST APIs, and database validation. The project combines reusable test components with isolated test data, failure diagnostics, cross-browser execution, and a GitHub Actions workflow.
 
-Selenium 测试 SauceDemo；REST Assured 测试 Restful Booker；JDBC 测试独立的本地 PostgreSQL。这三个系统互不连接。
+**46 business test executions · 35 test methods · Chrome & Firefox · Allure reporting**
 
-**The PostgreSQL module is a local test fixture used to demonstrate database validation with JDBC and SQL. It is not connected to SauceDemo's private backend.** 它也不是 Restful Booker 的数据库。
+## What this project tests
 
-## 环境和运行
+| Module | Target | Scenarios | Examples |
+|---|---|---:|---|
+| Web UI | SauceDemo | 24 | Login validation, product sorting, cart state, checkout and displayed totals |
+| REST API | Restful Booker | 14 | Authentication, CRUD, partial updates, filtering and rejected modifications |
+| Database | Local PostgreSQL fixture | 8 | Inserts, updates, deletes, joins, totals, foreign keys and parameter binding |
 
-需要 JDK 17+、JAVA_HOME、Chrome 或 Firefox、Docker Desktop Linux 引擎。数据库分组不需要浏览器，Web/API 分组不需要 Docker。首次运行需要联网下载依赖、驱动、镜像。
+These are **three independent systems**, not a connected frontend/API/database stack. The PostgreSQL fixture is not SauceDemo's or Restful Booker's backend. The Web checkout tests do not verify real payments. Mobile/Appium testing is not implemented.
 
-在项目根目录执行：
+The 46 executions include DataProvider expansion. Running the same Web scenarios in two browsers does not increase the number of unique business scenarios. Intentional failure probes are excluded from this count.
+
+## Engineering highlights
+
+- **Page Object Model:** selectors and browser actions are separated from business assertions.
+- **Explicit waits:** tests wait for observable page conditions instead of fixed sleeps.
+- **Web isolation:** a fresh browser session per test, with thread-local driver and page references.
+- **API data ownership:** uniquely identified bookings are tracked and cleaned up; cleanup errors remain visible.
+- **Database isolation:** each test uses its own JDBC connection and rolls back its transaction.
+- **Meaningful assertions:** rejected API modifications must leave data unchanged; PATCH must preserve unspecified fields.
+- **Failure evidence:** Web screenshots are captured before teardown and attached to Allure; API failure logs omit authentication bodies and headers.
+- **Controlled parallelism:** two-thread, class-level Web execution; API and database tests remain serial within their suites.
+
+## Architecture and stack
+
+```text
+Web tests ── Page Objects ── Selenium ────────── SauceDemo
+API tests ── API clients ── REST Assured ─────── Restful Booker
+DB tests ─── DatabaseClient ── JDBC ──────────── Docker PostgreSQL
+                         │
+                    TestNG / Maven
+                         │
+               Local runs / GitHub Actions
+                         │
+              Surefire / Allure / failure PNGs
+```
+
+Java 17 compilation target; local V5 validation used JDK 21. Dependency and plugin versions are pinned in [pom.xml](pom.xml). The project uses Selenium, TestNG, REST Assured, Jackson, pgJDBC, Allure and Maven Wrapper. PostgreSQL is pinned in [Docker Compose](docker/docker-compose.yml).
+
+```text
+src/main/java/pages/       Browser interactions and page observations
+src/main/java/api/         HTTP clients, models, configuration and diagnostics
+src/main/java/database/    JDBC connection and parameterized SQL helpers
+src/test/java/tests/       Web business tests
+src/test/java/api/         API tests and data lifecycle
+src/test/java/database/    Database tests and transaction lifecycle
+docker/                   PostgreSQL schema, seed data and Compose service
+.github/workflows/        GitHub Actions workflow
+docs/                     Version handoffs, snapshots and learning textbook
+```
+
+## Quick start
+
+Prerequisites: JDK 17+ with `JAVA_HOME`, Chrome or Firefox for Web tests, and Docker with Linux containers for database tests. Initial runs require network access to download dependencies, drivers and images. Web/API-only runs do not need Docker.
+
+Clone the repository, then run from its root:
 
 ```powershell
+git clone https://github.com/LeyuLeyuWang/end-to-end-qa-automation-framework.git
+cd end-to-end-qa-automation-framework
+
+# Web only: no database required
+.\mvnw.cmd '-Dgroups=web' '-Dheadless=true' test
+
+# Full regression: start the database first
 docker compose -f docker/docker-compose.yml up -d --wait
-.\mvnw.cmd test
-.\mvnw.cmd '-Dgroups=database' test
+.\mvnw.cmd '-Dheadless=true' clean test
+
+# Generate and view Allure reporting
+.\mvnw.cmd allure:report
+.\mvnw.cmd allure:serve
+```
+
+On Linux/macOS, use `sh ./mvnw` instead of `.\mvnw.cmd`. For example:
+
+```bash
+sh ./mvnw -Dgroups=web -Dheadless=true test
+```
+
+Defaults: Chrome, headed mode, serial execution. Selenium Manager manages drivers; supported browser downloads require network access. Local validation was performed on Windows.
+
+## Test selection and cross-browser execution
+
+```powershell
 .\mvnw.cmd '-Dgroups=api' test
-.\mvnw.cmd '-Dgroups=web' test
-.\mvnw.cmd '-Dgroups=smoke' test
-.\mvnw.cmd '-Dgroups=negative' test
-```
-
-已安装 Maven 可用 `mvn test -Dgroups=database`。macOS/Linux 入口为 `sh ./mvnw test`，当前实测平台是 Windows。版本固定在 pom.xml 和 Compose：Maven 3.9.11、PostgreSQL 17.11-alpine、pgJDBC 42.7.13，Web/API 依赖版本保留。
-
-| 分组 | 展开执行数 |
-|---|---:|
-| web | 24 |
-| api | 14 |
-| database | 8 |
-| regression（全部） | 46 |
-| smoke（跨三个模块） | 9 |
-| negative（跨三个模块） | 18 |
-
-分组是重叠标签，不要相加作为测试总数。默认 `test` 包含数据库，必须先启动 Compose。只选 web 或 api 可以不启动数据库。
-
-## 数据库模块（V4 引入）
-
-```text
-docker/docker-compose.yml                    镜像、端口、健康检查、持久卷
-docker/init/init.sql                         建表和种子数据
-.env.example                                 本地配置示例
-src/main/java/database/DatabaseConfig.java    读取配置、建立 JDBC 连接
-src/main/java/database/DatabaseClient.java    参数化 SQL、映射结果、事务回滚
-src/test/java/database/BaseDatabaseTest.java  每次测试连接生命周期
-src/test/java/database/DatabaseValidationTest.java 8 个数据库业务测试
-src/test/java/database/DatabaseRollbackProbe.java  显式失败诊断
-```
-
-没有 ORM、数据库连接池或自建后端。原有 Web Page Object、API 客户端、失败诊断保持独立。
-
-## 表结构与数据
-
-- users：id、唯一 email、active/inactive 状态。
-- orders：id、user_id 外键、pending/paid/cancelled 状态、非负金额、创建时间。
-- order_items：id、order_id 外键、商品名称、正数数量、非负单价；删除订单级联删除明细。
-
-初始化 1 个用户 seed@example.test、1 个 paid 订单、2 个明细，金额 29.99 + 9.99 = 39.98。数据均为虚构本地样例。
-
-SQL 在空数据卷首次启动时自动执行。已有数据卷重启不会重新运行初始化，修改 init.sql 也不会自动迁移旧数据库。[官方 PostgreSQL 镜像说明](https://hub.docker.com/_/postgres)
-
-## 八个数据库场景
-
-| 方法 | 验证 |
-|---|---|
-| seededUserIsActive | 查询种子用户并验证状态 |
-| insertedOrderCanBeRead | INSERT RETURNING 后 SELECT 核对金额和状态 |
-| orderStatusCanBeUpdated | UPDATE 影响一行，查询确认状态 |
-| orderCanBeDeleted | DELETE 影响一行，查询确认不存在 |
-| joinAssociatesOrderWithItsUser | JOIN 验证订单对应用户 |
-| seededOrderTotalMatchesLineItems | JOIN、SUM、COUNT 验证明细数量和金额合计 |
-| nonexistentUserCannotOwnOrder | 无效 user_id 被外键约束拒绝，SQLSTATE 23503 |
-| parameterizedInputCannotChangeQueryMeaning | 注入式文本作为普通参数处理，不影响种子数据 |
-
-最后一个场景是参数绑定演示，不宣称全面安全测试。金额使用 BigDecimal，序列 ID 不要求连续。
-
-## JDBC 和测试隔离
-
-每次测试建立独立连接、关闭 autoCommit。所有 SQL 使用 PreparedStatement，输入通过 setObject 绑定；ResultSet 和 Statement 使用 try-with-resources 关闭。RowMapper 将结果转换为类型明确的值或 record 后返回，客户端无测试断言。
-
-`@AfterMethod(alwaysRun = true)` 无论测试成功还是断言失败，都调用 rollback 并关闭连接。外键错误造成事务中止后也由 rollback 清理。序列值不会随事务回滚，这是 PostgreSQL 正常行为。没有自动重试或静默跳过数据库连接问题。
-
-## 配置
-
-Java 配置优先级：同名 `-DDB_*` 系统属性 → shell 环境变量 → 默认值。
-
-| 名称 | 默认值 |
-|---|---|
-| DB_HOST | localhost |
-| DB_PORT | 55432 |
-| DB_NAME | qa_fixture |
-| DB_USER | qa_local |
-| DB_PASSWORD | qa_local_only |
-
-Compose 项目名 qa-automation-v4，端口只绑定本机 127.0.0.1:55432，避免占用常用的 5432。凭据仅适用于本地测试。
-
-例如在 PowerShell 执行 `$env:DB_PORT = '55433'`，然后运行 Compose 和 Maven，可让两者读取相同端口。Maven 的 `-DDB_PORT` 只影响 Java，不影响容器映射。
-
-`.env.example` 是示例。只复制为 `.env` 不会让 Java 自动读取它，建议使用 shell 环境变量同时配置两端。真实密码不要写入源码。POSTGRES_* 配置也不会自动改变旧数据卷中的账号、密码或数据库名称。
-
-## Docker 操作
-
-```powershell
-docker compose -f docker/docker-compose.yml up -d --wait
-docker compose -f docker/docker-compose.yml ps
-docker compose -f docker/docker-compose.yml down
-```
-
-down 停止容器并保留数据卷。如果确实需要**删除本项目测试数据并重新初始化**，使用 `docker compose -f docker/docker-compose.yml down -v`，再运行 up。此命令会删除这个 Compose 项目的 pgdata 卷。
-
-连接失败时先确认 Docker 引擎已运行、容器 healthy、端口和 DB_* 配置一致。JDBC 连接超时 5 秒、读取超时 15 秒、SQL 查询超时 10 秒。
-
-## 报告、截图和故意失败探针
-
-业务报告默认保存在 target/surefire-reports。可指定独立报告目录：
-
-```powershell
-.\mvnw.cmd '-Dgroups=database' '-Dsurefire.reportsDirectory=target/database-reports' test
-.\mvnw.cmd '-Dtest=DatabaseRollbackProbe' '-Dsurefire.reportsDirectory=target/db-probe-reports' test
-```
-
-第二条命令会插入 rollback-probe@example.test 后故意失败，预期 BUILD FAILURE；清理完成后新连接应查询不到该用户。它不在 testng.xml 或默认测试发现命名模式中，不计入 46 个业务场景。
-
-Web 失败仍自动保存 test-output/screenshots 下的 PNG，成功不截图。API 在失败时输出脱敏请求/响应并清理自己创建的预约。历史 ScreenshotProbe 和 ApiFailureProbe 也仅显式运行，不属于业务套件。详见 V1/V2 README。
-
-## 文档与交接
-
-2026-09-13 实测数据库 8 个场景通过，完整 clean test 的 46 个场景全部通过（0 失败、0 错误、0 跳过）。故意失败后的独立连接检查确认探针数据已回滚，种子数据保持 1 用户、1 订单、2 明细。数据库容器当前保持运行。
-
-- [V4 开发交接](docs/V4_HANDOFF.md)：新增模块、验收结果，供教学聊天读取。
-- [V2 README](docs/V2_README.md)：14 个 API 场景、认证和日志详情。
-- [V1 README](docs/V1_README.md)：24 个 Web 场景和 Page Object 架构。
-- [V2 源码快照](docs/v2-baseline.zip)、[V1 快照](docs/v1-baseline.zip)、[V0 快照](docs/v0-baseline.zip)。
-- 原阶段计划和跳过 V3 的决定见 QA_Automation_Codex_V0-V5_Plans/README_STAGE_ORDER.md。
-
-V5 的实现和验收记录见下文。公开站点的目录、英文文案、API 行为发生变化仍可能导致外部测试失败。
-
-
-## V5：跨浏览器、并行、报告与 CI
-
-业务场景仍为 46 个。Chrome 与 Firefox 复用同一套 24 个 Web 场景，不把浏览器矩阵计作新增业务场景。V3 Appium 未开发，本项目不包含移动端测试。
-
-```text
-Web: Selenium → Page Objects → SauceDemo
-API: REST Assured → Booking/Auth clients → Restful Booker
-DB:  JDBC → prepared SQL + rollback → Docker PostgreSQL
-                ↓
-          TestNG + Maven
-                ↓
-      GitHub Actions / local run
-                ↓
-      Allure + Surefire + failure PNG
-```
-
-### 浏览器与并行
-
-```powershell
-.\mvnw.cmd '-Dgroups=web' '-Dbrowser=chrome' '-Dheadless=true' test
+.\mvnw.cmd '-Dgroups=database' test
+.\mvnw.cmd '-Dgroups=smoke' '-Dheadless=true' test
+.\mvnw.cmd '-Dgroups=negative' '-Dheadless=true' test
 .\mvnw.cmd '-Dgroups=web' '-Dbrowser=firefox' '-Dheadless=true' test
+
+# Web classes only, using two worker threads
 .\mvnw.cmd -Pparallel-web '-Dbrowser=chrome' '-Dheadless=true' test
 .\mvnw.cmd -Pparallel-web '-Dbrowser=firefox' '-Dheadless=true' test
 ```
 
-默认 Chrome、有窗口、串行。Selenium Manager 管理驱动，Firefox 未安装时可自动下载浏览器，需要联网。`-Dheadless` 优先于环境变量 `HEADLESS`，只接受 true/false。
+| Group | Executions |
+|---|---:|
+| `web` | 24 |
+| `api` | 14 |
+| `database` | 8 |
+| `regression` | 46 |
+| `smoke` | 9 |
+| `negative` | 18 |
 
-`parallel-web` 选择 testng-web-parallel.xml，两个工作线程按类并行，只运行 Web。默认 testng.xml 保持全部模块串行。可以给并行命令加 `-Dgroups=smoke` 选择 Web smoke 子集。
+Groups overlap; do not add their counts. Full-suite `smoke` and `negative` include database tests. The `parallel-web` profile selects [testng-web-parallel.xml](testng-web-parallel.xml), which contains only Web classes. Adding `-Dgroups=smoke` to that profile selects only Web smoke tests. Do not enable method/DataProvider parallelism for the API or database modules without revisiting their shared state.
 
-BaseTest 用 ThreadLocal 保存当前线程的 driver 和 LoginPage，每次测试新建浏览器，finally 中 quit/remove；Page Object 不使用静态 driver。API 和数据库仍按串行生命周期设计，不支持擅自切换 methods 或 DataProvider 并行。
+## Configuration and database fixture
 
-### Allure
+| Setting | Default | Override |
+|---|---|---|
+| Browser | `chrome` | `-Dbrowser=chrome` or `firefox` |
+| Headless | `false` | `-Dheadless=true`, otherwise `HEADLESS` environment variable |
+| Web URL | `https://www.saucedemo.com/` | `-DbaseUrl=...` |
+| Explicit wait | 10 seconds | `-DwaitSeconds=...` |
+| API URL | `https://restful-booker.herokuapp.com` | `-DapiBaseUrl=...` |
+| Database host / port | `localhost` / `55432` | `DB_HOST` / `DB_PORT` |
+| Database name | `qa_fixture` | `DB_NAME` |
+| Database user / password | `qa_local` / `qa_local_only` | `DB_USER` / `DB_PASSWORD` |
+
+Java database configuration precedence is system property (`-DDB_*`) → shell environment variable → default. Use shell variables to configure both Compose and Java; Maven properties do not change container port mappings. Copying [.env.example](.env.example) does **not** make Java load a `.env` file automatically. Use only demo/test credentials: Surefire can record test parameters even though specific Allure/API fields are redacted.
+
+The fixture contains `users`, `orders` and `order_items`, seeded with one user, one order and two items totaling 39.98. SQL uses `PreparedStatement`; money uses `BigDecimal`. Tests roll back their own transactions; generated sequence IDs need not be consecutive.
+
+The Compose project is named `qa-automation-v4`, where the database module was introduced. Its port binds only to `127.0.0.1`. Initialization scripts run on an empty data volume; restarting an existing volume does not rerun them or migrate the schema.
 
 ```powershell
-# 新回归前 clean 避免历史结果混入，需要先启动数据库
-.\mvnw.cmd '-Dheadless=true' clean test
-.\mvnw.cmd allure:report
-# 启动本地服务查看交互报告，Ctrl+C 停止
-.\mvnw.cmd allure:serve
+docker compose -f docker/docker-compose.yml ps
+docker compose -f docker/docker-compose.yml down
 ```
 
-原始结果 target/allure-results，HTML target/site/allure-maven-plugin。推荐 allure:serve 查看，而不是双击 index.html。首次使用插件会下载 Allure CLI。无需全局 Allure 或 AspectJ：使用编程方式添加附件，没有 @Step/@Attachment 注解。
+`down` preserves the named volume. Only when intentionally deleting this project's fixture data, use `down -v` before starting again. Connection troubleshooting: check the Docker engine, service health, port and matching `DB_*` settings. Detailed schema and database scenarios are documented in the [V4 reference](docs/V4_README.md) (Chinese).
 
-报告包含状态、断言堆栈、参数、分组标签，以及 Web 的 browser/headless 标签。失败 PNG 在浏览器关闭前保存并附加到 Allure，成功不截图。登录密码参数在 Allure 原始 JSON 中替换为 [REDACTED]。Surefire 本身仍可能记录参数；此演示项目只使用公开测试凭据，不要传入生产凭据。
+## Reports and diagnostic probes
 
-故意失败探针应单独运行，避免污染业务报告：
+| Output | Location |
+|---|---|
+| Surefire results | `target/surefire-reports/` |
+| Allure raw results | `target/allure-results/` |
+| Allure HTML | `target/site/allure-maven-plugin/` |
+| Web failure screenshots | `test-output/screenshots/` |
+
+Use `clean test` for a fresh set of Allure results, or select a separate results directory. `allure:report` generates HTML; `allure:serve` serves it for interactive viewing. Maven downloads the Allure CLI when first needed; no global Allure installation or AspectJ is required. Maven `clean` does not clear the separate screenshot directory.
+
+Failure probes explicitly validate failure handling and are not part of the business suite:
 
 ```powershell
 .\mvnw.cmd '-Dtest=ScreenshotProbe' '-Dheadless=true' '-Dallure.results.directory=target/probe-allure-results' '-Dsurefire.reportsDirectory=target/probe-reports' test
 ```
 
-预期 2 失败、1 通过，Maven 返回非零；两条失败结果应各有 PNG 附件。不计入 46 个业务场景。
+Expected: **2 intentional failures and 1 pass**, with separate PNG attachments for both failures. A nonzero Maven exit code is expected. `ApiFailureProbe` and `DatabaseRollbackProbe` similarly exercise cleanup after intentional failure; select them explicitly and use separate report directories.
 
-### GitHub Actions
+## GitHub Actions and validation
 
-.github/workflows/qa-tests.yml 响应 push、pull_request、手动触发。四个独立 job：Chrome Web、Firefox Web、API、数据库。Java 21 + Maven 缓存；Web 无头按类并行；数据库 job 启动并等待 Compose 健康。
+The [QA workflow](.github/workflows/qa-tests.yml) runs on push, pull request and manual dispatch. Its matrices define four jobs: Chrome Web, Firefox Web, API and database. It sets up Java 21 and Maven caching, uses headless Web class parallelism, and starts a healthy PostgreSQL fixture for the database job.
 
-测试失败后仍尝试生成 Allure HTML、上传 Surefire/Allure/截图；数据库另存日志并停止容器。失败不会通过自动重试或忽略退出码变绿。产物保留 14 天。
+After failures, jobs still attempt to generate Allure reports and upload results, screenshots and database logs. Artifacts are retained for 14 days. Test failures are not hidden by automatic retries or ignored exit codes.
 
-当前目录未初始化 Git、没有 GitHub 远端，工作流只完成本地静态校验，**尚未在 GitHub Actions 实际运行**。上传仓库后须核对四个 job 和可下载产物，才能关闭云端验收项。没有伪造 CI 截图。
+**Recorded local V5 validation (2026-09-14):** 46/46 full-suite executions passed; parallel headless Chrome and Firefox each passed 24/24 Web scenarios; the screenshot probe produced the expected attachments. The workflow also passed local `actionlint` validation. These records are not a claim that every subsequent hosted run passes. See [GitHub Actions](https://github.com/LeyuLeyuWang/end-to-end-qa-automation-framework/actions) for current hosted results.
 
-- [V5 开发交接](docs/V5_HANDOFF.md)：本次修改和实测记录。
-- [V4 README](docs/V4_README.md) / [V4 源码快照](docs/v4-baseline.zip)：供版本对照。
+Public demo services, network availability and upstream UI/API changes can affect results. This project does not claim measured code coverage, performance improvements or comprehensive security testing.
 
+## Learning material and version history
 
-## 项目配套教材
-
-[打开 19 章网页教材](docs/textbook/index.html)：面向会 Java 基础的学习者，中英结合讲解测试思想、框架、进阶语法和当前源码，附练习答案与完整源码索引。可直接用浏览器离线打开。另有 [Markdown 合集](docs/textbook/QA_AUTOMATION_TEXTBOOK.md)。
+- [Textbook guide](docs/textbook/README.md): 19 chapters on testing principles, framework concepts, Java syntax and project source, primarily in Chinese with English terminology and interview explanations.
+- [Read the textbook as Markdown](docs/textbook/QA_AUTOMATION_TEXTBOOK.md), or clone the repository and open `docs/textbook/index.html` locally. GitHub's HTML file view is not a hosted textbook site.
+- [V5 handoff](docs/V5_HANDOFF.md), [V4 reference](docs/V4_README.md), [V2 reference](docs/V2_README.md), [V1 reference](docs/V1_README.md) (Chinese).
+- Source snapshots: [V0](docs/v0-baseline.zip), [V1](docs/v1-baseline.zip), [V2](docs/v2-baseline.zip), [V4](docs/v4-baseline.zip).
+- Development path: **V0 → V1 → V2 → V4 → V5**. V3 mobile testing was intentionally deferred; historical documents describe their respective snapshots.
