@@ -2,6 +2,8 @@
 
 > Jenkins is also supported: see the [pipeline and local setup guide](docs/JENKINS.md). GitHub Actions remains available; the local Jenkins job is manually triggered.
 
+**Jenkins validation (2026-09-16):** the first local build passed all 46 scenarios using headless Chrome, published test results, archived Allure reports and cleaned up its isolated database fixture. [View the actual results screenshot](docs/images/jenkins-test-results.png).
+
 **English** | [简体中文](README.zh-CN.md)
 
 A Java QA automation portfolio covering browser workflows, REST APIs, and database validation. The project combines reusable test components with isolated test data, failure diagnostics, cross-browser execution, and a GitHub Actions workflow.

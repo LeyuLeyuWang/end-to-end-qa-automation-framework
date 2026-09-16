@@ -37,6 +37,21 @@ Open `qa-automation` and use **Build Now**, or **Build with Parameters** after t
 
 The job is manually triggered. No webhook, public tunnel, scheduled polling or Internet-facing Jenkins endpoint is configured. This setup does not provide automatic push-triggered Jenkins execution.
 
+### Verified run
+
+On **2026-09-16**, local Jenkins **2.568.3** build **#1** checked out commit `ec56997` from GitHub and finished **SUCCESS** using Java 21 and headless Chrome:
+
+| Suite | Passed | Failed | Skipped |
+|---|---:|---:|---:|
+| API | 14 | 0 | 0 |
+| Database | 8 | 0 | 0 |
+| Web | 24 | 0 | 0 |
+| Total | 46 | 0 | 0 |
+
+Jenkins published all 46 results and archived 350 files, including the Allure HTML, raw results and PostgreSQL log. The Allure summary independently reports 46 passed. The build's database container and volume were confirmed removed. This verifies the Chrome Jenkins path; Firefox remains selectable but was not rerun through Jenkins in this acceptance run.
+
+![Actual Jenkins build #1 test results](images/jenkins-test-results.png)
+
 ## 本地 Jenkins 流水线
 
 新增 Jenkinsfile 复用现有测试，保留 GitHub Actions。阶段包括拉取 GitHub、环境检查、独立数据库启动、API 14 个、数据库 8 个、无头 Web 24 个、报告归档和清理。
@@ -48,3 +63,7 @@ The job is manually triggered. No webhook, public tunnel, scheduled polling or I
 端口 55433 与普通测试的 55432 分离。每次构建的 Compose 项目名为 qa-jenkins-构建号，最后只删除本次容器和临时数据卷。测试失败后仍尝试其他阶段，最终构建保持失败；进程被强制终止时清理不能保证。
 
 这是需要登录、仅本机可访问的个人学习实例，使用一个内置执行槽，只运行可信代码。没有公网开放、GitHub webhook 或定时轮询，当前手动触发；团队部署应使用独立 agent 与统一凭据管理。
+
+**2026-09-16 实测：** Jenkins 2.568.3 的第 1 次构建从 GitHub 拉取 `ec56997`，以 Java 21 和 Chrome 无头运行，最终 SUCCESS。46 个场景全部通过，0 失败、0 跳过；Jenkins 测试统计与 Allure 统计一致，归档 350 个文件。已核对本次数据库容器和卷没有残留。本轮未通过 Jenkins 额外重跑 Firefox。
+
+本机 Docker 启动时发现损坏的运行时通信文件。已将原运行目录保留为 `%LOCALAPPDATA%\Docker\run.backup-20260916-jenkins` 后重建运行目录，未重置 Docker、删除镜像或已有数据卷。

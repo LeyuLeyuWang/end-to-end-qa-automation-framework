@@ -27,9 +27,11 @@ pipeline {
     stages {
         stage('Check environment') {
             steps {
-                script { command('java -version')
-                command('docker info') }
-                script { command('docker compose version') }
+                script {
+                    command('java -version')
+                    command('docker info')
+                    command('docker compose version')
+                }
                 dir('test-output/screenshots') { deleteDir() }
                 script { maven('clean test-compile') }
             }

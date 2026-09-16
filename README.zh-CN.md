@@ -2,6 +2,8 @@
 
 > 现已支持 Jenkins，详见 [流水线与本地配置说明](docs/JENKINS.md)。保留 GitHub Actions；本地 Jenkins 任务手动触发。
 
+**Jenkins 验收（2026-09-16）：** 首次本地构建使用 Chrome 无头模式，46 个场景全部通过，成功发布测试结果、归档 Allure 报告并清理独立数据库。[查看真实结果截图](docs/images/jenkins-test-results.png)。
+
 [English](README.md) | **简体中文**
 
 Java QA 自动化作品集，涵盖浏览器流程、REST API 和数据库验证。项目结合可复用的测试组件、独立测试数据、失败诊断、跨浏览器执行和 GitHub Actions 工作流。
