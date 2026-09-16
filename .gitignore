@@ -1,0 +1,12 @@
+.tools/
+target/
+test-output/
+.idea/
+*.iml
+.vscode/
+*.log
+.env
+.allure/
+__pycache__/
+*.py[cod]
+.venv/
