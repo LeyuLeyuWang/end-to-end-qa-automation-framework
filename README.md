@@ -1,5 +1,7 @@
 # End-to-End QA Automation Framework
 
+> Jenkins is also supported: see the [pipeline and local setup guide](docs/JENKINS.md). GitHub Actions remains available; the local Jenkins job is manually triggered.
+
 **English** | [简体中文](README.zh-CN.md)
 
 A Java QA automation portfolio covering browser workflows, REST APIs, and database validation. The project combines reusable test components with isolated test data, failure diagnostics, cross-browser execution, and a GitHub Actions workflow.

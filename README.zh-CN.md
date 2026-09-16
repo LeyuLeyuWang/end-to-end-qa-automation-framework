@@ -1,5 +1,7 @@
 # End-to-End QA Automation Framework
 
+> 现已支持 Jenkins，详见 [流水线与本地配置说明](docs/JENKINS.md)。保留 GitHub Actions；本地 Jenkins 任务手动触发。
+
 [English](README.md) | **简体中文**
 
 Java QA 自动化作品集，涵盖浏览器流程、REST API 和数据库验证。项目结合可复用的测试组件、独立测试数据、失败诊断、跨浏览器执行和 GitHub Actions 工作流。
